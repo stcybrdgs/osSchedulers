@@ -17,8 +17,6 @@ using namespace std;
 struct cpuNode{
    float simClock;                // simulation clock    
    bool cpuIsBusy;                // busy flag
-	int preemptedFlag;				 // 0=unknown, 1=preempted, 
-											 // 2=not preempted
    struct procListNode* pLink;    // the target process
 };
 
@@ -29,8 +27,8 @@ struct readyQNode{
 
 struct eventQNode{
    float time;          
-   int type;                      // 1=arrival; 2=departure; 
-											 // 3=allocation; 4=preemption   
+   int type;                      // 1 = arrival; 2 = departure; 
+											 // 3 = allocation; 4 = preemption   
    struct eventQNode* eNext;      // point to next event in the event queue
    struct procListNode* pLink;    // point to matching process in process list
 };
@@ -38,7 +36,7 @@ struct eventQNode{
 struct procListNode{
    float arrivalTime;    
    float startTime;
-	float lastStartTime;
+	float reStartTime;
    float finishTime;
    float serviceTime;
    float remainingTime;
@@ -61,6 +59,7 @@ cpuNode* cpuHead;                // the cpu node (there's only one)
 /////////////////////////////////////////////////////
 // helper function
 void insertIntoEventQ(eventQNode*);
+procListNode* getSRTProcess();
 
 /////////////////////////////////////////////////////
 // define function implementations
@@ -83,17 +82,16 @@ void init(){
 	// create the cpu node
    cpuHead = new cpuNode; 
    cpuHead->simClock = 0.0;
-   cpuHead->cpuIsBusy = 0;        // cpu flag: 0=false=idle, 1=true=busy 
+   cpuHead->cpuIsBusy = 0;   // cpu flag: 0=false=idle, 1=true=busy 
    cpuHead->pLink = 0;
-	cpuHead->preemptedFlag = 0;    // 0=unknown, 1=preempted, 
-											 // 2=not preempted
-	       
+       
+
    // create process list node, point pHead to it, initialize member vars
    // this first node is being initialized as the first process for the sim
    pHead = new procListNode;
    pHead->arrivalTime = genExp((float)lambda);   
    pHead->startTime = 0.0;
-   pHead->lastStartTime = 0.0;
+   pHead->reStartTime = 0.0;
    pHead->finishTime = 0.0;
    pHead->serviceTime = genExp(mu);  
    pHead->remainingTime = pHead->serviceTime;
@@ -135,119 +133,141 @@ void tester(){
 		scheduleArrival();
 		handleArrival();
 	}
+	cpuHead->simClock = (float)10.01;
+	scheduleAllocation();
+	handleArrival();
+	handleAllocation();
+	
+	scheduleArrival();
+	handleArrival();
+	
+	//cpuHead->pLink->reStartTime = 15.01;
+	
+	cout << "EST FIN TIME: " << cpuEstFinishTime() << endl; 	
+	scheduleArrival();
+	cout << "isPreemptive: " << isPreemptive() << endl; 	
+	scheduleDeparture();
+	handleArrival();
+	handleDeparture();
+	cpuHead->simClock = (float)0.01;
+	
 	scheduleAllocation();
 	handleAllocation();	
-	scheduleDeparture();	
-	handleDeparture();	
-	printQueues();
+	cout << "EST FIN TIME: " << cpuEstFinishTime() << endl; 	
+	scheduleArrival();
+	eHead->time = (float)0.69012;
+	eHead->pLink->arrivalTime = (float)0.69012;
+	eHead->pLink->remainingTime = (float)0.012643;
+	cout << "isPreemptive: " << isPreemptive() << endl; 
+	schedulePreemption();
+	handlePreemption();
+	handleArrival();
+	handleDeparture();
+	rHead->pLink->arrivalTime = (float).69001;
+	rHead->rNext->pLink->arrivalTime = (float).69002;
+	scheduleAllocation();
+	eHead->pLink->startTime = (float)0.01;
+	handleAllocation();
+	cout << "EST FIN TIME: " << cpuEstFinishTime() << endl; 	
+	//scheduleAllocation();
+	//handleAllocation();
+	//scheduleAllocation();
+	//handleAllocation();
+	//scheduleAllocation();
+	//handleAllocation();
+	
+	
+	//printQueues();
 }
 
 void FCFS(){
-	int arrivalCount = 0;
 	int departureCount = 0;
-	while( departureCount < batchSize ){ 		 
-		// case 1: cpu is not busy -------------------
+	while( departureCount < batchSize ){ 		  //tester(); break; // XXXXXXXXXXXXXXX
+		// CASE 1: cpu is not busy -------------------
 		if( cpuHead->cpuIsBusy == false ){
-			if( arrivalCount < (batchSize * 1.10) ){
-				scheduleArrival();
-				arrivalCount++;
-			}
+			scheduleArrival();
 			if( rHead != 0 ){
 				scheduleAllocation();
 			}
 		}
-		// case 2: cpu is busy -------------------
-		else{
-			scheduleDeparture();
-		}
+		// CASE 2: cpu is busy -----------------------
+		else scheduleDeparture();
 
-		// now, handle the next event in the eventQ
-		if( eHead->type == 1 ){
-			handleArrival();			
-		}
+		// ANY CASE: handle next event ---------------
+		if( eHead->type == 1 ) handleArrival();			
 		else if( eHead->type == 2 ){  
 			handleDeparture();
 			departureCount++;
 		}
-		else if( eHead->type == 3 ){
-			handleAllocation();
-		}
-		else{
-			cout << "Error in FCFS()." << endl;
-		}
+		else if( eHead->type == 3 ) handleAllocation();
 	} // end while
 }
 
 void SRTF(){
 	int arrivalCount = 0;
 	int departureCount = 0;
-
 	while( departureCount < batchSize ){ 		  
-		// schedule an arrival on every iteration up to threshold
-		if( arrivalCount < (batchSize * 1.10) ){
+		// on each pass, schedule an arrival, up to batchSize * 1.20
+		if( arrivalCount < ( batchSize * 1.20 ) ){
 			scheduleArrival();
 			arrivalCount++;
 		}
-		// case 1: cpu is not busy -------------------
+
+		// CASE 1: cpu is not busy -------------------
 		if( cpuHead->cpuIsBusy == false ){
-			if( rHead != 0 ){
-				scheduleAllocation();	
-			}
+			if( rHead != 0 ) scheduleAllocation();					
 		}
-		// case 2: cpu is busy -------------------
+		// CASE 2: cpu is busy -----------------------
 		else{
-			if( cpuHead->preemptedFlag == 2 ){
-				scheduleDeparture();
+			// if( okayToDepart ) scheduleDeparture();				
+			if( eHead->type == 1 ){							
+				// if arrival time > cpu finish time, it's ok to depart
+				if( eHead->time > cpuEstFinishTime() )	
+					scheduleDeparture();
+				// if arrival preempts cpu, then schedule a preemption
+				else if( isPreemptive() ) 
+					schedulePreemption();
 			}
 		}
-		// all: on every iteration, handle the next event in eventQ
-		if( eHead == 0 ){
-			scheduleArrival();				
-		}
-		if( eHead->type == 1 && cpuHead->cpuIsBusy == 1 ){
-			// when cpu is busy, if a new arrival time is more than the
-			// estimated cpu finish time, then set the preemptedFlag to 
-			// indicate it's ok to schedule a departure on the next pass
-			if( eHead->time > cpuEstFinishTime() ){
-				cpuHead->preemptedFlag = 2;
-			}
-			// else, if new arrival time is less than est. finish time, then
-			// check if the arrival preempts; if so, schedule a preempt event
-			else if( isPreempted() == 1 ){
-				schedulePreemption();		
-				cpuHead->preemptedFlag = 1;
-			}
-		}
-		// now handle all other types of events; for the arrivals, only handle 
-		// the ones that occur when no preempting or departing is occuring
-		if( eHead->type == 1 && cpuHead->preemptedFlag == 0 ){
-			handleArrival();			// handle arrival
-		}
-		if( eHead->type == 2) {         
-			handleDeparture();		// handle departure	
+		// ANY CASE: handle next event ---------------
+		if( eHead->type == 1) handleArrival(); 
+		else if( eHead->type == 2 ){						
+			handleDeparture();
+			//okayToDepart = false;
 			departureCount++;
 		}
-		if( eHead->type == 3 ){        
-			handleAllocation();		// handle allocation		
-		}
-		if( eHead->type == 4 ){         
-			handlePreemption();		// handle preemption
-		}
+		else if( eHead->type == 3 ) handleAllocation();
+		else if( eHead->type == 4 ) handlePreemption();
 	} // end while
 }
 
-bool isPreempted(){
-	cout << "isPreempted() " << endl;
-	float cpuRT = cpuEstFinishTime() - eHead->time;
-	float nuArrivalRT = eHead->pLink->remainingTime;
+float cpuEstFinishTime(){
+	float estFinish;
+	float startTime = cpuHead->pLink->startTime;
+	float reStartTime = cpuHead->pLink->reStartTime;
+	float remainingTime = cpuHead->pLink->remainingTime;
 
-	if( cpuRT > nuArrivalRT ) return true;
-	else return false;
+	if( reStartTime == 0 ) estFinish = startTime + remainingTime;
+	else estFinish = reStartTime + remainingTime;
+
+	return estFinish;
 }
 
-float cpuEstFinishTime(){
-	return ( cpuHead->pLink->lastStartTime + 
-		      cpuHead->pLink->remainingTime );
+bool isPreemptive(){ 
+	// get estimated cpu finish time
+	float cpuFinishTime = cpuEstFinishTime();
+
+	// get estimated remaining time if cpu proc is preempted
+	float cpuRemainingTime =	cpuFinishTime - eHead->time;
+	
+	// if arrival time < cpuFinishTime && arrival's 
+	// remaining time < cpuRemainingTime, then arrival is preemptive
+	if( ( eHead->time < cpuFinishTime ) && 
+		 ( eHead->pLink->remainingTime < 
+		   cpuRemainingTime ) ){
+		return true;
+	}
+	else return false;
 }
 
 void HRRN(){}
@@ -266,7 +286,7 @@ void scheduleArrival(){
    pIt->pNext = new procListNode;
    pIt->pNext->arrivalTime = pIt->arrivalTime + genExp((float)lambda);
    pIt->pNext->startTime = 0.0;
-   pIt->pNext->lastStartTime = 0.0;
+   pIt->pNext->reStartTime = 0.0;
    pIt->pNext->finishTime = 0.0;
    pIt->pNext->serviceTime = genExp(mu);
    pIt->pNext->remainingTime = pIt->pNext->serviceTime;
@@ -281,41 +301,6 @@ void scheduleArrival(){
 
 	// insert into eventQ in asc time order
 	insertIntoEventQ(nuArrival);
-}
-
-// schedules an allocation event in eventQ
-void scheduleAllocation(){
-	cout << "schedule allocation" << endl;
-
-	// create an allocation event 
-   eventQNode* nuAllocation = new eventQNode;
-	if( cpuHead->simClock < rHead->pLink->arrivalTime ){
-		nuAllocation->time = rHead->pLink->arrivalTime;
-	}
-	else{
-		nuAllocation->time = cpuHead->simClock;	
-	}
-   nuAllocation->type = 3;
-   nuAllocation->pLink = rHead->pLink;
-   nuAllocation->eNext = 0;    
-
-	// insert into eventQ in asc time order
-	insertIntoEventQ(nuAllocation);
-}
-
-// schedules a departure event in eventQ
-void scheduleDeparture(){
-	cout << "schedule departure" << endl;
-
-	// create a new event node for the departure event     
-   eventQNode* nuDeparture = new eventQNode;
-   nuDeparture->time = ( cpuHead->simClock + cpuHead->pLink->remainingTime );
-   nuDeparture->type = 2;
-   nuDeparture->eNext = 0;
-   nuDeparture->pLink = cpuHead->pLink;
-
-	// insert into eventQ in asc time order
-	insertIntoEventQ(nuDeparture);
 }
 
 // moves process from eventQ to readyQ
@@ -341,21 +326,119 @@ void handleArrival(){
 	popEventQHead();
 }
 
+// schedules an allocation event in eventQ
+void scheduleAllocation(){
+	cout << "schedule allocation" << endl;
+
+	// create a new event queue node
+	eventQNode* nuAllocation = new eventQNode;
+		
+	// identify the next process to be allocated to the cpu
+	procListNode* nextProc;
+	if( schedulerType == 1 ) nextProc = rHead->pLink;		// FCFS
+	else if( schedulerType == 2 ){								// SRTF
+		if( cpuHead->simClock > rHead->pLink->arrivalTime ){
+			nextProc = getSRTProcess();							
+		}
+		else{ 
+			nextProc = rHead->pLink;
+		}
+	}
+	// set the time of the allocation event
+	if( cpuHead->simClock < nextProc->arrivalTime ){
+		nuAllocation->time = nextProc->arrivalTime;
+	} 
+	else{
+		nuAllocation->time = cpuHead->simClock;
+	}
+
+	// set the values for type, next, and pLink
+	nuAllocation->type = 3;
+	nuAllocation->eNext = 0;
+	nuAllocation->pLink = nextProc;
+	
+	// insert new event into eventQ
+	insertIntoEventQ( nuAllocation );
+}
+
 // moves process from readyQ to CPU
 void handleAllocation(){
 	cout << "handle allocation" << endl;
 
-	cpuHead->pLink = rHead->pLink;			// point cpu to readyQ proc
-	cpuHead->cpuIsBusy = true;					// update busy flag
-	cpuHead->simClock = eHead->time;			// update sim clock
-	cpuHead->pLink->lastStartTime =			// update last start time
-		cpuHead->simClock;
-	popReadyQHead();								// pop proc from readyQ
-	popEventQHead();								// pop allocation event
+	// point cpu to the proc named in the allocation event
+	cpuHead->pLink = eHead->pLink;		
+
+	if( schedulerType == 2 ){
+		// find the corresponding process in readyQ and move
+		// it to top of readyQ if it's not already there
+		readyQNode* rIt = rHead->rNext;
+		readyQNode* rItPrev = rHead;
+		if( rItPrev->pLink->arrivalTime !=
+			 eHead->pLink->arrivalTime ){
+			while( rIt != 0 ){
+				if( rIt->pLink->arrivalTime ==
+					 eHead->pLink->arrivalTime ){
+					rItPrev->rNext = rIt->rNext;
+					rIt->rNext = rHead;
+					rHead = rIt;
+					break;
+				}
+				rIt = rIt->rNext;
+				rItPrev = rItPrev->rNext;
+			}
+		}
+	}
 	
-	if( cpuHead->pLink->startTime == 0 ){	// update start time  
+	// pop the readyQ and eventQ records
+	popReadyQHead();							
+	popEventQHead();			
+
+	// set the busy flag to show the cpu is now busy
+	cpuHead->cpuIsBusy = true;				
+	
+	// update sim clock
+	if( cpuHead->simClock < cpuHead->pLink->arrivalTime ){		
+		// if clock < arrival time, then clock = arrival time
+		cpuHead->simClock = cpuHead->pLink->arrivalTime;
+	}
+
+	// update start/restart time as needed
+	if( cpuHead->pLink->startTime == 0 ){  
 		cpuHead->pLink->startTime = cpuHead->simClock;
 	}
+	else{
+		cpuHead->pLink->reStartTime = cpuHead->simClock;
+	}
+}
+
+// schedules a departure event in eventQ
+void scheduleDeparture(){
+	cout << "schedule departure" << endl;
+
+	// create a new event node for the departure event     
+   eventQNode* nuDeparture = new eventQNode;
+   nuDeparture->type = 2;
+   nuDeparture->eNext = 0;
+   nuDeparture->pLink = cpuHead->pLink;
+
+	// set the departure time for the event
+	if( schedulerType == 1 ){ 
+		nuDeparture->time =	cpuHead->pLink->startTime + 
+									cpuHead->pLink->remainingTime;
+	}
+	else if( schedulerType == 2 ){
+		if( cpuHead->pLink->reStartTime == 0 ){
+			nuDeparture->time =	cpuHead->pLink->startTime + 
+										cpuHead->pLink->remainingTime;	
+		}
+		else{ 
+			nuDeparture->time =	cpuHead->pLink->reStartTime + 
+										cpuHead->pLink->remainingTime;	
+		}
+	}
+
+	// insert the new event into eventQ in asc time order
+	insertIntoEventQ(nuDeparture);
 }
 
 // terminates a process and clears the cpu
@@ -368,7 +451,6 @@ void handleDeparture(){
    cpuHead->pLink = 0;								
    cpuHead->simClock = eHead->time;	
    cpuHead->cpuIsBusy = false;
-	cpuHead->preemptedFlag = 0;
 		
 	// pop the departure from the eventQ
 	popEventQHead();
@@ -378,62 +460,53 @@ void handleDeparture(){
 void schedulePreemption(){
 	cout << "schedule preemption" << endl;
 
-   // create a new event node for the preemption event
-   eventQNode* nuPreemption = new eventQNode;
-   nuPreemption->time = eHead->pLink->arrivalTime;
-   nuPreemption->type = 4;
-   nuPreemption->eNext = 0;
-   nuPreemption->pLink = eHead->pLink;
+	eventQNode* nuPreemption = new eventQNode;
+	nuPreemption->time = eHead->time;
+	nuPreemption->type = 4;
+	nuPreemption->eNext = 0;
+	nuPreemption->pLink = eHead->pLink;
 
-   // pop the pre-empting arrival from the eventQ
+	// pop the arrival event from eHead so that 
+	// it can be replaced by the preemption event
 	popEventQHead();
 
-	// insert into eventQ in asc time order
-	insertIntoEventQ(nuPreemption);
+	// insert new event into eventQ
+	insertIntoEventQ( nuPreemption );
 }
 
-// moves preempted proc out of cpu and preempting proc into cpu
+// moves a preempting proc from readyQ to the cpu
 void handlePreemption(){
 	cout << "handle preemption" << endl;
 
-	// update remaining time for process that is in the cpu
-	float remainingTime = cpuHead->pLink->remainingTime;
-	float timeRunning = eHead->time - cpuHead->pLink->lastStartTime;
-	float nuRemainingTime = remainingTime - timeRunning;
-	cpuHead->pLink->remainingTime = nuRemainingTime;
+	// create a temp ptr to hold the current cpu pLink
+	procListNode* preemptedProcPtr = cpuHead->pLink;
 
-	// create a new readyQ node to hold the preempted process
-	readyQNode* preEmptedProc = new readyQNode;
-	preEmptedProc->pLink = cpuHead->pLink;
-	preEmptedProc->rNext = 0;
-	
-	// append preEmpted to readyQ
-	if( rHead == 0 ){
-		rHead = preEmptedProc;
-	}
-	else if( rHead->rNext == 0 ){
-		rHead->rNext = preEmptedProc;
+	// update the remaining time
+	cpuHead->pLink->remainingTime =	
+		cpuEstFinishTime() - eHead->time;
+
+	// point cpu to preempting process and update data as needed
+	cpuHead->pLink = eHead->pLink;
+	cpuHead->simClock = eHead->time;
+	if( cpuHead->pLink->reStartTime == 0.0  ){
+		cpuHead->pLink->startTime = eHead->time;
 	}
 	else{
-		readyQNode* rIt = rHead;
-		while( rIt->rNext != 0 ){
-			rIt = rIt->rNext;
-		}
-		rIt->rNext = preEmptedProc;
+		cpuHead->pLink->reStartTime = eHead->time;
 	}
 
-	// put the preempting proc into the cpu
-	cpuHead->simClock = eHead->time;			// update sim clock event time
-	cpuHead->pLink = eHead->pLink;			// point cpu to eHead proc
-	cpuHead->preemptedFlag = 0;
-	cpuHead->pLink->lastStartTime =			// update last start time 
-	cpuHead->simClock;
-	if( cpuHead->pLink->startTime == 0 ){  // update start time
-		cpuHead->pLink->startTime = cpuHead->simClock;
-	}
+	// schedule an arrival event for the preempted proc
+	eventQNode* preemptedProcArrival = new eventQNode;
+	preemptedProcArrival->time = eHead->time;
+	preemptedProcArrival->type = 1;
+	preemptedProcArrival->eNext = 0;
+	preemptedProcArrival->pLink = preemptedProcPtr;
 
-	// pop the preemption from the eventQ
+	// pop the preemption event from the eventQ
 	popEventQHead();
+
+	// insert new event into eventQ
+	insertIntoEventQ( preemptedProcArrival );		
 }
 
 /////////////////////////////////////////////////////
@@ -455,7 +528,7 @@ float genExp(float val){
    return x;
 }
 
-void insertIntoEventQ( eventQNode* nuEvent){
+void insertIntoEventQ( eventQNode* nuEvent ){
 	// put the new event in the readyQ, sorted by time
    if( eHead == 0 ) eHead = nuEvent;
    else if( eHead->time > nuEvent->time ){
@@ -467,11 +540,13 @@ void insertIntoEventQ( eventQNode* nuEvent){
       while( eIt != 0 ){
          if( (eIt->time < nuEvent->time) && (eIt->eNext == 0) ){
             eIt->eNext = nuEvent; 
+				break;
          }             
          else if( (eIt->time < nuEvent->time) && 
                   (eIt->eNext->time > nuEvent->time)){
             nuEvent->eNext = eIt->eNext;
-            eIt->eNext = nuEvent;                                    
+            eIt->eNext = nuEvent;     
+				break;
          }
          else{
             eIt = eIt->eNext;
@@ -490,6 +565,22 @@ void popReadyQHead(){
 	readyQNode* tempPtr = rHead;
 	rHead = rHead->rNext;
 	delete tempPtr;
+}
+
+procListNode* getSRTProcess(){ // DONE
+	// pre-condition: there is something in the readyQ
+	readyQNode* rIt = rHead;
+	procListNode* srtProc = rIt->pLink;
+	float srt = rIt->pLink->remainingTime;
+	while( rIt != 0){
+		if( rIt->pLink->remainingTime < srt ){
+			srt = rIt->pLink->remainingTime;
+			srtProc = rIt->pLink;
+		}
+		rIt = rIt->rNext;
+	}
+	cout << "SRTPROC IS: " << srtProc->arrivalTime << endl;
+	return srtProc;
 }
 
 /////////////////////////////////////////////////////
@@ -568,15 +659,15 @@ void printQueues(){
    procListNode* pIt = pHead;
    cout << endl;
    cout << "process list: --------------------" << endl;
-   cout << "arrivalTime\t\t serviceTime\t\t startTime\t\t lastStartTime\t\tfinishTime\t\t remainingTime\t\t" << endl;
+   cout << "arrivalTime\t\t serviceTime\t\t sTime\t\t rsTime\t\t fTime\t\t rTime\t\t" << endl;
    while( pIt != 0 ){
       cout << pIt->arrivalTime << "  \t\t"
-           << pIt->serviceTime << "  \t\t";
-           if( pIt->startTime == 0 ) cout << "________0\t\t"; else cout << pIt->startTime << "  \t\t";
-           if( pIt->lastStartTime == 0 ) cout << "________0\t\t"; else cout << pIt->lastStartTime << "  \t\t";
-           if( pIt->finishTime == 0 ) cout << "________0\t\t"; else cout << pIt->finishTime << "  \t\t";
-           if( pIt->remainingTime == 0 ) cout << "________0\t\t"; else cout << pIt->remainingTime << "  \t\t";
-           cout << endl;
+           << pIt->serviceTime << "  \t\t"
+           << pIt->startTime   << "  \t\t"
+           << pIt->reStartTime   << "  \t\t"
+           << pIt->finishTime  << "  \t\t"
+           << pIt->remainingTime  << "  \t\t"
+           << endl;
       pIt = pIt->pNext;
    }
    cout << endl;
@@ -624,11 +715,11 @@ void printQueues(){
       cout << "cpu: --------------------" << endl;
       cout << "simClock\t cpuIsBusy\t procArrival\t procStart\t " << endl;   
 		cout  << cpuHead->simClock << "\t\t"
-				<< cpuHead->cpuIsBusy << "\t\t"
-				<< endl;   
+				<< cpuHead->cpuIsBusy << "\t\t";
 		if( cpuHead->pLink != 0 ){
 			cout	<< cpuHead->pLink->arrivalTime << "\t"
-					<< cpuHead->pLink->startTime << "\t";
+					<< cpuHead->pLink->startTime << "\t"
+					<< endl;   
 		}
 }
 

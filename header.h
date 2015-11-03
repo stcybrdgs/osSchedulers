@@ -36,7 +36,7 @@ void handleAllocation();
 void handlePreemption();
 void popReadyQHead();
 void popEventQHead();
-bool isPreempted();
+bool isPreemptive();
 float cpuEstFinishTime();
 
 /////////////////////////////////////////////////////
