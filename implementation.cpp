@@ -59,7 +59,9 @@ cpuNode* cpuHead;                // the cpu node (there's only one)
 /////////////////////////////////////////////////////
 // helper function
 void insertIntoEventQ(eventQNode*);
+float getResponseRatioValue(procListNode*);
 procListNode* getSRTProcess();
+procListNode* getHRRProcess();
 
 /////////////////////////////////////////////////////
 // define function implementations
@@ -212,7 +214,6 @@ void SRTF(){
 			scheduleArrival();
 			arrivalCount++;
 		}
-
 		// CASE 1: cpu is not busy -------------------
 		if( cpuHead->cpuIsBusy == false ){
 			if( rHead != 0 ) scheduleAllocation();					
@@ -240,6 +241,32 @@ void SRTF(){
 		else if( eHead->type == 4 ) handlePreemption();
 	} // end while
 }
+
+void HRRN(){
+	int departureCount = 0;
+	while( departureCount < batchSize ){ 		  
+		// CASE 1: cpu is not busy -------------------
+		if( cpuHead->cpuIsBusy == false ){
+			scheduleArrival();
+			if( rHead != 0 ){
+				scheduleAllocation(); // HRR rules are in the method
+			}
+		}
+		// CASE 2: cpu is busy -----------------------
+		else scheduleDeparture();
+
+		// ANY CASE: handle next event ---------------
+		if( eHead->type == 1 ) handleArrival();			
+		else if( eHead->type == 2 ){  
+			handleDeparture();
+			departureCount++;
+		}
+		else if( eHead->type == 3 ) handleAllocation();
+	} // end while
+
+}
+
+void RR(){}
 
 float cpuEstFinishTime(){
 	float estFinish;
@@ -269,9 +296,6 @@ bool isPreemptive(){
 	}
 	else return false;
 }
-
-void HRRN(){}
-void RR(){}
 
 // adds a process to process list and
 // schedules an arrival event in eventQ
@@ -333,17 +357,22 @@ void scheduleAllocation(){
 	// create a new event queue node
 	eventQNode* nuAllocation = new eventQNode;
 		
-	// identify the next process to be allocated to the cpu
+	// identify the next process to be allocated to the cpu:
 	procListNode* nextProc;
-	if( schedulerType == 1 ) nextProc = rHead->pLink;		// FCFS
-	else if( schedulerType == 2 ){								// SRTF
-		if( cpuHead->simClock > rHead->pLink->arrivalTime ){
+	if( schedulerType == 1 ) nextProc = rHead->pLink;  // FCFS
+	else if( schedulerType == 2 ){							// SRTF
+		if( cpuHead->simClock > 
+			 rHead->pLink->arrivalTime ){
 			nextProc = getSRTProcess();							
 		}
 		else{ 
 			nextProc = rHead->pLink;
 		}
 	}
+	else if( schedulerType == 3 ){							// HRRN
+		nextProc = getHRRProcess();
+	}
+
 	// set the time of the allocation event
 	if( cpuHead->simClock < nextProc->arrivalTime ){
 		nuAllocation->time = nextProc->arrivalTime;
@@ -356,7 +385,7 @@ void scheduleAllocation(){
 	nuAllocation->type = 3;
 	nuAllocation->eNext = 0;
 	nuAllocation->pLink = nextProc;
-	
+
 	// insert new event into eventQ
 	insertIntoEventQ( nuAllocation );
 }
@@ -368,7 +397,10 @@ void handleAllocation(){
 	// point cpu to the proc named in the allocation event
 	cpuHead->pLink = eHead->pLink;		
 
-	if( schedulerType == 2 ){
+	cout << "proc named in allocation event: " << eHead->pLink->arrivalTime << endl;
+
+	if( schedulerType == 2 ||		// FCFS
+		 schedulerType == 3 ){	   // HRRN
 		// find the corresponding process in readyQ and move
 		// it to top of readyQ if it's not already there
 		readyQNode* rIt = rHead->rNext;
@@ -422,18 +454,22 @@ void scheduleDeparture(){
    nuDeparture->pLink = cpuHead->pLink;
 
 	// set the departure time for the event
-	if( schedulerType == 1 ){ 
-		nuDeparture->time =	cpuHead->pLink->startTime + 
-									cpuHead->pLink->remainingTime;
+	if( schedulerType == 1 ||							// FCFS
+		 schedulerType == 3 ){							// HRRN
+		nuDeparture->time =	
+			cpuHead->pLink->startTime + 
+			cpuHead->pLink->remainingTime;
 	}
-	else if( schedulerType == 2 ){
+	else if( schedulerType == 2 ){					// SRTF
 		if( cpuHead->pLink->reStartTime == 0 ){
-			nuDeparture->time =	cpuHead->pLink->startTime + 
-										cpuHead->pLink->remainingTime;	
+			nuDeparture->time =	
+				cpuHead->pLink->startTime + 
+				cpuHead->pLink->remainingTime;	
 		}
 		else{ 
-			nuDeparture->time =	cpuHead->pLink->reStartTime + 
-										cpuHead->pLink->remainingTime;	
+			nuDeparture->time =							
+				cpuHead->pLink->reStartTime + 
+				cpuHead->pLink->remainingTime;	
 		}
 	}
 
@@ -579,8 +615,30 @@ procListNode* getSRTProcess(){ // DONE
 		}
 		rIt = rIt->rNext;
 	}
-	cout << "SRTPROC IS: " << srtProc->arrivalTime << endl;
 	return srtProc;
+}
+
+procListNode* getHRRProcess(){
+	readyQNode* rIt = rHead;
+	procListNode* hrrProc = rIt->pLink;
+	float hrr = getResponseRatioValue( hrrProc );		
+
+	while( rIt != 0){
+		if( getResponseRatioValue( rIt->pLink ) > hrr ){
+			hrr = getResponseRatioValue( rIt->pLink );
+			hrrProc = rIt->pLink;
+		}
+		rIt = rIt->rNext;
+	}
+	return hrrProc;
+}
+
+float getResponseRatioValue( procListNode* thisProc ){
+	float HRR = ( ( cpuHead->simClock - 
+		             thisProc->arrivalTime ) +
+					    thisProc->serviceTime ) /
+						 thisProc->serviceTime;
+	return HRR;
 }
 
 /////////////////////////////////////////////////////
