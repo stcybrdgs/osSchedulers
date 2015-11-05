@@ -5,10 +5,10 @@
 *   date:         11/04/2015  
 *   description:  This program provides discrete time
 *                 event simulations for 4 schedulers:
-*			          1. First Come First Serve
-*				       2. Shortest Remaining Time First
-*  				    3. Highest Response Ratio Next
-*				       4. Round Robin
+*	                1. First Come First Serve
+*                  2. Shortest Remaining Time First
+*                  3. Highest Response Ratio Next
+*                  4. Round Robin
 ****************************************************/
 
 /////////////////////////////////////////////////////
