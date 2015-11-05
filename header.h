@@ -2,7 +2,7 @@
 *   course:       CS4328 
 *   project:      Project 1 - Scheduler Simulator 
 *   programmer:   Stacy Bridges
-*   date:         10/29/2015  
+*   date:         11/04/2015  
 *   description:  for description, see "main.cpp"
 ****************************************************/
 #ifndef HEADER_H
@@ -34,6 +34,14 @@ void handleArrival();
 void handleDeparture();
 void handleAllocation();
 void handlePreemption();
+void scheduleQuantumDeparture();
+void scheduleQuantumAllocation();
+void scheduleQuantumPreemption();
+void handleQuantumAllocation();
+void handleQuantumPreemption();
+void handleQuantumDeparture();
+float getNextQuantumClockTime();
+float getNextQuantumAllocationTime();
 void popReadyQHead();
 void popEventQHead();
 bool isPreemptive();
@@ -46,10 +54,5 @@ float getTotalThroughput();
 float getCpuUtil();
 float getAvgNumProcInQ();
 
-/////////////////////////////////////////////////////
-// test functions
-void printQueues();   
-void printMetricsData();
-void tester();
 
 #endif
