@@ -53,6 +53,9 @@ float getAvgTurnaroundTime();
 float getTotalThroughput();
 float getCpuUtil();
 float getAvgNumProcInQ();
+// rem future inclusions and sync to new firebase version
+// float getMaxNumProcInQ();
+// float getMinNumProcInQ();
 
 
 #endif
