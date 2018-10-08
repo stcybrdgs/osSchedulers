@@ -4,14 +4,14 @@ CFLAGS  = -g -Wall
 
 default: proj1
 
-# identify source files needed to create the object files
+# identify source files that are needed to create the object files
 main.o:  main.cpp header.h
 	$(CC) $(CFLAGS) -c main.cpp
 
 implementation.o:  implementation.cpp header.h 
 	$(CC) $(CFLAGS) -c implementation.cpp
 
-# identify object files needed to create the executable
+# identify object files that are needed to create the executable
 proj1:  main.o implementation.o 
 	$(CC) $(CFLAGS) -o proj1 main.o implementation.o
 
