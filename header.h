@@ -1,10 +1,10 @@
-/****************************************************
+/*****************************************************
 *   course:       CS4328 
 *   project:      Project 1 - Scheduler Simulator 
 *   programmer:   Stacy Bridges
 *   date:         11/04/2015  
 *   description:  for description, see "main.cpp"
-****************************************************/
+*****************************************************/
 #ifndef HEADER_H
 #define HEADER_H
 
